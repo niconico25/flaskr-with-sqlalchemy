@@ -9,6 +9,7 @@ from werkzeug.exceptions import abort
 
 from flaskr.auth import login_required
 from flaskr.db import get_db
+from flaskr import models
 
 bp = Blueprint("blog", __name__)
 
@@ -16,12 +17,13 @@ bp = Blueprint("blog", __name__)
 @bp.route("/")
 def index():
     """Show all the posts, most recent first."""
-    db = get_db()
-    posts = db.execute(
-        "SELECT p.id, title, body, created, author_id, username"
-        " FROM post p JOIN user u ON p.author_id = u.id"
-        " ORDER BY created DESC"
-    ).fetchall()
+    # - db = get_db()
+    # - posts = db.execute(
+    # -     "SELECT p.id, title, body, created, author_id, username"
+    # -     " FROM post p JOIN user u ON p.author_id = u.id"
+    # -     " ORDER BY created DESC"
+    # - ).fetchall()
+    posts = models.Post.query.all()
     return render_template("blog/index.html", posts=posts)
 
 
@@ -37,21 +39,23 @@ def get_post(id, check_author=True):
     :raise 404: if a post with the given id doesn't exist
     :raise 403: if the current user isn't the author
     """
-    post = (
-        get_db()
-        .execute(
-            "SELECT p.id, title, body, created, author_id, username"
-            " FROM post p JOIN user u ON p.author_id = u.id"
-            " WHERE p.id = ?",
-            (id,),
-        )
-        .fetchone()
-    )
+    # - post = (
+    # -     get_db()
+    # -     .execute(
+    # -         "SELECT p.id, title, body, created, author_id, username"
+    # -         " FROM post p JOIN user u ON p.author_id = u.id"
+    # -         " WHERE p.id = ?",
+    # -         (id,),
+    # -     )
+    # -     .fetchone()
+    # - )
+    post = models.Post.query.filter_by(id=id).first()
 
     if post is None:
         abort(404, "Post id {0} doesn't exist.".format(id))
 
-    if check_author and post["author_id"] != g.user["id"]:
+    # - if check_author and post["author_id"] != g.user["id"]:
+    if check_author and post.author_id != g.user.id:
         abort(403)
 
     return post
@@ -73,11 +77,14 @@ def create():
             flash(error)
         else:
             db = get_db()
-            db.execute(
-                "INSERT INTO post (title, body, author_id) VALUES (?, ?, ?)",
-                (title, body, g.user["id"]),
-            )
-            db.commit()
+            # - db.execute(
+            # -     "INSERT INTO post (title, body, author_id) VALUES (?, ?, ?)",
+            # -     (title, body, g.user["id"]),
+            # - )
+            # - db.commit()
+            post = models.Post(title=title, body=body, author_id=g.user.id)
+            db.session.add(post)
+            db.session.commit()
             return redirect(url_for("blog.index"))
 
     return render_template("blog/create.html")
@@ -101,10 +108,14 @@ def update(id):
             flash(error)
         else:
             db = get_db()
-            db.execute(
-                "UPDATE post SET title = ?, body = ? WHERE id = ?", (title, body, id)
-            )
-            db.commit()
+            # - db.execute(
+            # -     "UPDATE post SET title = ?, body = ? WHERE id = ?", (title, body, id)
+            # - )
+            # - db.commit()
+            post = models.Post.query.filter_by(id=id).first()
+            post.title = title
+            post.body = body
+            db.session.commit()
             return redirect(url_for("blog.index"))
 
     return render_template("blog/update.html", post=post)
@@ -120,6 +131,8 @@ def delete(id):
     """
     get_post(id)
     db = get_db()
-    db.execute("DELETE FROM post WHERE id = ?", (id,))
-    db.commit()
+    # - db.execute("DELETE FROM post WHERE id = ?", (id,))
+    post = models.Post.query.filter_by(id=id).first()
+    db.session.delete(post)
+    db.session.commit()
     return redirect(url_for("blog.index"))
